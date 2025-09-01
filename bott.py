@@ -1,6 +1,6 @@
 import logging
 import json
-import re
+import re 
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -9,7 +9,8 @@ from telegram.ext import (
     MessageHandler,
     ContextTypes,
     filters,
-    CallbackQueryHandler
+    CallbackQueryHandler,
+    ChatMemberHandler
 )
 
 # إعدادات اللوغ
@@ -20,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # بيانات البوت
-TOKEN = "7582278216:AAGMb33o159SSsiqUuEmz3iRAVP1Asa3Uwc"
+TOKEN = "8124498237:AAHipIHoU3W6OzYF2RiuxZvkc7ar8FWmyas"
 USER_FILE = "users.json"
 WARN_FILE = "warns.json"
 SETTINGS_FILE = "settings.json"
@@ -57,7 +58,35 @@ banned_words = {
 # الردود التلقائية
 auto_replies = {
     "سلام": "وعليكم السلام 🖐",
-    "تصبح على خير": "وأنت من أهلو 🤍🌙",
+    "تصبح على خير": "وأنت من أهله 🤍🌙",
+}
+
+# رسائل الترحيب
+WELCOME_MESSAGES = {
+    "ar": """
+أهلا وسهلا بك في مجتمعنا الراقي للإعلام الآلي  
+عليك الالتزام بهذه الجملة من القوانين:   
+1- عدم نشر الروابط دون اذن   
+2- عدم التحدث في مواضيع جانبية ما عدا الدراسة و الحرص على التحدث بلباقة
+3- الامتناع عن التواصل المشبوه في الخاص (بإمكانك طرح اي أسئلة في المجموعة لذلك يمنع استخدام هذه الحجة )
+كما نعلمكم اننا مسؤولون فقط عما يحدث داخل المجموعة 
+4-  الامتثال لقرارات المشرفين ضروري للحفاظ على النظام
+ملاحظة: في حالات الضرورة يمكن التواصل مع المشرفين ( الاناث مع مالكة المجموعة و الذكور مع المشرفين الذكور)
+🫧 𝓣𝓸𝓾𝓴𝓪 ꨄ︎
+""",
+    "en": """
+Welcome to our refined Computer Science community.
+You must adhere to the following set of rules:
+1. Do not share links without permission
+2. Avoid discussing off-topic subjects unless related to studies, and always speak politely
+3. Refrain from suspicious private messaging
+(You can ask any questions in the group, so this excuse is not acceptable)
+Please note: we are only responsible for what happens within the group
+4. Compliance with the supervisors’ decisions is essential to maintain order
+Note: In necessary cases, you may contact the supervisors
+(Females should reach out to the group owner, and males to the male admins)
+🫧 𝓣𝓸𝓾𝓴𝓪 ꨄ︎
+"""
 }
 
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -157,7 +186,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def send_intro_message(update: Update):
     await update.message.reply_text(
-        "👋 مرحبا بك في بوت إدارة المجموعة المتقدم ⚙️\n\n"
+        "👋 مرحبا بك في بوت إدارة المجموعة المتقدم ⚙️\n\n"  
+" *صنع بواسطة:* [Mik_emm](https://t.me/Mik_emm) مع ❤️\n"
+
+"📌 يمكنك استخدام الأوامر التالية:\n\n"
         "📌 أوامر المشرفين:\n"
         "👮‍♂️ /admins - عرض الإداريين\n"
         "📢 /tagall - تاق لجميع الأعضاء\n"
@@ -167,7 +199,7 @@ async def send_intro_message(update: Update):
         "🔢 /setwarns 3 - ضبط عدد التحذيرات للطرد\n"
         "🔗 /delete_links on/off - التحكم بحذف الروابط\n"
         "📶 /ping - فحص حالة البوت\n\n"
-        "🚀 صنع بواسطة @Mik_emm مع ❤️",
+        "🚀 صنع بواسطة mik_emm مع ❤️",
         parse_mode="Markdown"
     )
 
@@ -187,7 +219,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 └ /warn_list - عرض قائمة المحذرين
 
 🔗 **اشتراك القناة المطلوب:**
-- يجب الاشتراك في قناة @Mik_emm لاستخدام البوت
+- يجب الاشتراك في قناة mik_emm لاستخدام البوت
 """
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
@@ -238,10 +270,103 @@ async def warn_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⚠️ يجب ذكر اسم المستخدم مع @")
             return
 
-        # هنا يجب إضافة كود التحذير الفعلي
-        await update.message.reply_text(f"✅ تم تحذير {username} بنجاح")
+        # الحصول على ID المستخدم من الرسالة التي تم الرد عليها
+        if update.message.reply_to_message:
+            user_id = update.message.reply_to_message.from_user.id
+        else:
+            # محاولة الحصول على ID من اسم المستخدم
+            try:
+                chat_member = await context.bot.get_chat_member(update.effective_chat.id, username)
+                user_id = chat_member.user.id
+            except Exception:
+                await update.message.reply_text("⚠️ لم يتم العثور على المستخدم")
+                return
+
+        warns = await warn_user(update.effective_chat.id, user_id, reason)
+        max_warns = settings.get(str(update.effective_chat.id), {}).get("max_warns", 3)
+
+        if warns >= max_warns:
+            await update.effective_chat.ban_member(user_id)
+            await update.message.reply_text(f"🚷 تم طرد {username} لتجاوزه حد التحذيرات ({max_warns})")
+        else:
+            await update.message.reply_text(f"⚠️ تم تحذير {username} ({warns}/{max_warns})" + (f"\nالسبب: {reason}" if reason else ""))
+
     except Exception as e:
         logger.error(f"Error in warn command: {e}")
+        await update.message.reply_text("⚠️ حدث خطأ أثناء تنفيذ الأمر.")
+
+@admin_only
+async def unwarn_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        if not context.args or len(context.args) < 1:
+            await update.message.reply_text("⚠️ الصيغة: /unwarn @username")
+            return
+
+        username = context.args[0]
+
+        if not username.startswith('@'):
+            await update.message.reply_text("⚠️ يجب ذكر اسم المستخدم مع @")
+            return
+                     
+        # الحصول على ID المستخدم من الرسالة التي تم الرد عليها
+        if update.message.reply_to_message:
+            user_id = update.message.reply_to_message.from_user.id
+        else:
+            # محاولة الحصول على ID من اسم المستخدم
+            try:
+                chat_member = await context.bot.get_chat_member(update.effective_chat.id, username)
+                user_id = chat_member.user.id
+            except Exception:
+                await update.message.reply_text("⚠️ لم يتم العثور على المستخدم")
+                return
+
+        if await reset_warns(update.effective_chat.id, user_id):
+            await update.message.reply_text(f"✅ تم إزالة جميع التحذيرات لـ {username}")
+        else:
+            await update.message.reply_text(f"ℹ️ لا يوجد تحذيرات لـ {username}")
+
+    except Exception as e:
+        logger.error(f"Error in unwarn command: {e}")
+        await update.message.reply_text("⚠️ حدث خطأ أثناء تنفيذ الأمر.")
+
+@admin_only
+async def get_warns_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        if not context.args or len(context.args) < 1:
+            await update.message.reply_text("⚠️ الصيغة: /warns @username")
+            return
+
+        username = context.args[0]
+
+        if not username.startswith('@'):
+            await update.message.reply_text("⚠️ يجب ذكر اسم المستخدم مع @")
+            return
+
+        # الحصول على ID المستخدم من الرسالة التي تم الرد عليها
+        if update.message.reply_to_message:
+            user_id = update.message.reply_to_message.from_user.id
+        else:
+            # محاولة الحصول على ID من اسم المستخدم
+            try:
+                chat_member = await context.bot.get_chat_member(update.effective_chat.id, username)
+                user_id = chat_member.user.id
+            except Exception:
+                await update.message.reply_text("⚠️ لم يتم العثور على المستخدم")
+                return
+
+        warns_info = await get_warns(update.effective_chat.id, user_id)
+        max_warns = settings.get(str(update.effective_chat.id), {}).get("max_warns", 3)
+
+        if warns_info["count"] > 0:
+            message = f"⚠️ تحذيرات {username}: {warns_info['count']}/{max_warns}\n"
+            if warns_info["reasons"]:
+                message += "الأسباب:\n" + "\n".join(f"- {reason}" for reason in warns_info["reasons"])
+            await update.message.reply_text(message)
+        else:
+            await update.message.reply_text(f"ℹ️ لا يوجد تحذيرات لـ {username}")
+
+    except Exception as e:
+        logger.error(f"Error in warns command: {e}")
         await update.message.reply_text("⚠️ حدث خطأ أثناء تنفيذ الأمر.")
 
 @admin_only
@@ -286,6 +411,62 @@ async def delete_links_setting(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         logger.error(f"Error in delete_links_setting: {e}")
         await update.message.reply_text("⚠️ حدث خطأ أثناء تعديل الإعداد.")
+
+@admin_only
+async def warn_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        chat_id = str(update.effective_chat.id)
+        if chat_id not in warns_data or not warns_data[chat_id]:
+            await update.message.reply_text("ℹ️ لا يوجد أعضاء محذرين حالياً")
+            return
+
+        message = "📋 قائمة الأعضاء المحذرين:\n\n"
+        for user_id, warn_info in warns_data[chat_id].items():
+            try:
+                user = await context.bot.get_chat_member(chat_id, int(user_id))
+                username = f"@{user.user.username}" if user.user.username else user.user.full_name
+                message += f"• {username}: {warn_info['count']} تحذيرات\n"
+            except Exception:
+                message += f"• مستخدم (ID: {user_id}): {warn_info['count']} تحذيرات\n"
+
+        await update.message.reply_text(message)
+    except Exception as e:
+        logger.error(f"Error in warn_list: {e}")
+        await update.message.reply_text("⚠️ حدث خطأ أثناء جلب قائمة المحذرين.")
+
+async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🏓 البوت يعمل بشكل طبيعي!")
+
+async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        for member in update.message.new_chat_members:
+            # تجاهل إذا كان البوت نفسه
+            if member.id == context.bot.id:
+                continue
+            
+            # إرسال رسالة الترحيب
+            await update.message.reply_text(
+                WELCOME_MESSAGES["ar"],
+                parse_mode="Markdown"
+            )
+            
+            # إرسال النسخة الإنجليزية بعد 3 ثواني
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=WELCOME_MESSAGES["en"],
+                parse_mode="Markdown",
+                reply_to_message_id=update.message.message_id
+            )
+            
+            # تسجيل المستخدم
+            chat_id = str(update.effective_chat.id)
+            if chat_id not in users_by_chat:
+                users_by_chat[chat_id] = []
+            if member.id not in users_by_chat[chat_id]:
+                users_by_chat[chat_id].append(member.id)
+                save_data(users_by_chat, USER_FILE)
+    except Exception as e:
+        logger.error(f"Error in welcome_new_member: {e}")
 
 def contains_banned_word(text):
     if not text:
@@ -370,12 +551,16 @@ def main():
     app.add_handler(CommandHandler("admins", admins))
     app.add_handler(CommandHandler("tagall", tagall))
     app.add_handler(CommandHandler("warn", warn_user_command))
+    app.add_handler(CommandHandler("unwarn", unwarn_user_command))
+    app.add_handler(CommandHandler("warns", get_warns_command))
+    app.add_handler(CommandHandler("warn_list", warn_list))
     app.add_handler(CommandHandler("setwarns", set_max_warns))
     app.add_handler(CommandHandler("delete_links", delete_links_setting))
+    app.add_handler(CommandHandler("ping", ping))
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
-    
-    # إضافة معالج الأخطاء
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
+
     app.add_error_handler(error_handler)
     
     print("✅ البوت يعمل الآن...")
